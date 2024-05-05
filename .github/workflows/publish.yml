@@ -33,5 +33,5 @@ jobs:
       - name: 'Publish container'
         shell: bash
         run: |
-          docker push "ghcr.io/moddingx/reposilite-patches:${github.ref_name}"
+          docker push "ghcr.io/moddingx/reposilite-patches:${{ github.ref_name }}"
           docker push "ghcr.io/moddingx/reposilite-patches:latest"
