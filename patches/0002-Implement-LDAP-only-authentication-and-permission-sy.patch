@@ -1,0 +1,222 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: noeppi_noeppi <noeppinoeppi@gmail.com>
+Date: Sun, 5 May 2024 11:57:46 +0200
+Subject: [PATCH] Implement LDAP-only authentication and permission sync.
+
+
+diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
+index 36a8bc9eed5c33c0f4defca0aaf905387d056226..da5c53fa7af05cd522512958559f18f25d223a36 100644
+--- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
++++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
+@@ -17,14 +17,19 @@
+ package com.reposilite.auth
+ 
+ import com.reposilite.auth.api.Credentials
++import com.reposilite.auth.application.BasicSettings
+ import com.reposilite.shared.ErrorResponse
+ import com.reposilite.shared.unauthorizedError
+ import com.reposilite.token.AccessTokenFacade
+ import com.reposilite.token.api.AccessTokenDto
+ import panda.std.Result
+ import panda.std.asSuccess
++import panda.std.reactive.Reference
+ 
+-internal class BasicAuthenticator(private val accessTokenFacade: AccessTokenFacade) : Authenticator {
++internal class BasicAuthenticator(
++    private val accessTokenFacade: AccessTokenFacade,
++    private val basicSettings: Reference<BasicSettings>
++) : Authenticator {
+ 
+     override fun authenticate(credentials: Credentials): Result<AccessTokenDto, ErrorResponse> =
+         accessTokenFacade.getAccessToken(credentials.name)
+@@ -33,7 +38,7 @@ internal class BasicAuthenticator(private val accessTokenFacade: AccessTokenFaca
+             ?: unauthorizedError("Invalid authorization credentials")
+ 
+     override fun enabled(): Boolean =
+-        true
++        basicSettings.map { it.enabled }
+ 
+     override fun realm(): String =
+         "Basic"
+diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
+index c197f879b1e6191df6d8c9f80668393c9fc40177..7bcd376862f378853230f5f1fb98c898fe349324 100644
+--- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
++++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
+@@ -29,6 +29,9 @@ import com.reposilite.shared.notFoundError
+ import com.reposilite.shared.unauthorized
+ import com.reposilite.status.FailureFacade
+ import com.reposilite.token.AccessTokenFacade
++import com.reposilite.token.AccessTokenPermission
++import com.reposilite.token.Route
++import com.reposilite.token.RoutePermission
+ import com.reposilite.token.api.AccessTokenDto
+ import com.reposilite.token.api.CreateAccessTokenRequest
+ import java.util.Hashtable
+@@ -76,7 +79,7 @@ internal class LdapAuthenticator(
+                     it.search(
+                         ldapFilterQuery = "(&(objectClass=$typeAttribute)($userAttribute={0})$userFilter)", // find user entry with search user,
+                         ldapFilterQueryArguments = arrayOf(credentials.name),
+-                        requestedAttributes = arrayOf(userAttribute)
++                        requestedAttributes = arrayOf(userAttribute, memberAttribute)
+                     )
+                 }
+                 .filter { users ->
+@@ -88,31 +91,62 @@ internal class LdapAuthenticator(
+                 }
+                 .map { users ->
+                     users.first().let {
+-                        it.fullName to it.attributes[userAttribute]
++                        Triple(it.fullName, it.attributes[userAttribute], it.attributes[memberAttribute])
+                     }
+                 }
+-                .filter({ (_, attributes) -> attributes != null }, { badRequest("User attribute not found") })
+-                .map { (userDomain, username) -> userDomain to username!! }
+-                .filter { (_, attributes) ->
++                .filter({ (_, attributes, _) -> attributes != null }, { badRequest("User attribute not found") })
++                .map { (userDomain, username, groups) -> Triple(userDomain, username!!, groups ?: listOf()) }
++                .filter { (_, attributes, _) ->
+                     when {
+                         attributes.isEmpty() -> badRequest("Username attribute not found")
+                         attributes.size > 1 -> badRequest("Could not identify one specific username attribute: ${attributes.joinToString()}")
+                         else -> accept() // only one attribute value is allowed
+                     }
+                 }
+-                .map { (userDomain, username) -> userDomain to username.first() }
+-                .filter({ (userDomain, _) -> disableUserPasswordAuthentication || createDirContext(user = userDomain, password = credentials.secret).isOk }) { unauthorized("Unauthorized LDAP access") }
+-                .map { (_, username) ->
+-                    accessTokenFacade.getAccessToken(username)
++                .map { (userDomain, username, groups) -> Triple(userDomain, username.first(), groups) }
++                .filter({ (userDomain, _, _) -> /*disableUserPasswordAuthentication ||*/ createDirContext(user = userDomain, password = credentials.secret).isOk }) { unauthorized("Unauthorized LDAP access") }
++                .flatMap { (_, username, groups) ->
++                    val token = accessTokenFacade.getAccessToken(username)
+                         ?: accessTokenFacade.createAccessToken(
+                             CreateAccessTokenRequest(
+                                 type = ldapSettings.map { it.userType },
+                                 name = username,
+-                                secret = credentials.secret
++                                secret = null // Generate a random token that can't be used because we disabled basic auth
+                             )
+                         ).accessToken
++                    syncPermissions(token, groups).map { token }
+                 }
+         }
++    
++    private fun syncPermissions(accessToken: AccessTokenDto, groups: List<String>): Result<Void, ErrorResponse> =
++        with(ldapSettings.get()) {
++            if (managerGroup.isNotEmpty() && groups.contains(managerGroup)) {
++                accessTokenFacade.addPermission(accessToken.identifier, AccessTokenPermission.MANAGER)
++            } else {
++                accessTokenFacade.deletePermission(accessToken.identifier, AccessTokenPermission.MANAGER)
++            }
++            val readRoutes = HashSet<String>()
++            val writeRoutes = HashSet<String>()
++            for (permission in permissions) {
++                if (groups.contains(permission.ldapGroup)) {
++                    readRoutes.addAll(permission.read)
++                    writeRoutes.addAll(permission.write)
++                }
++            }
++            readRoutes.removeAll(writeRoutes)
++            val routesToAdd = HashSet<Route>()
++            routesToAdd.addAll(readRoutes.map { Route(it, RoutePermission.READ) })
++            routesToAdd.addAll(writeRoutes.map { Route(it, RoutePermission.WRITE) })
++            val routesToDelete = HashSet<Route>()
++            for (route in accessTokenFacade.getRoutes(accessToken.identifier)) {
++                val routeSet = if (route.permission == RoutePermission.WRITE) writeRoutes else readRoutes
++                if (!routeSet.contains(route.path)) routesToDelete.add(route)
++                if (routeSet.contains(route.path)) routesToAdd.remove(route)
++            }
++            for (route in routesToDelete) accessTokenFacade.deleteRoute(accessToken.identifier, route)
++            for (route in routesToAdd) accessTokenFacade.addRoute(accessToken.identifier, route)
++            Result.ok(null)
++        }
+ 
+     private fun createDirContext(user: String, password: String): Result<out DirContext, ErrorResponse> =
+         Hashtable<String, String>()
+diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
+index 5ece1c8db22bfb38150533a49e831a556fa99752..67d1261fc79966b45f5c3bdef67433324575a618 100644
+--- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
++++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
+@@ -36,7 +36,8 @@ class AuthenticationComponents(
+ ) : PluginComponents {
+ 
+     private fun basicAuthenticator(): BasicAuthenticator =
+-        BasicAuthenticator(accessTokenFacade)
++        BasicAuthenticator(accessTokenFacade,
++            Reference.computed(Dependencies.dependencies(authenticationSettings)) { authenticationSettings.map { it.basic } })
+ 
+     private fun ldapAuthenticator(): LdapAuthenticator =
+         LdapAuthenticator(
+diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
+index 3df3f14168b2ba5e3f8b34394b6ff19afbbdf8b1..528c0f81362bb2a5401db30be92353be60da6348 100644
+--- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
++++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
+@@ -25,9 +25,16 @@ import io.javalin.openapi.JsonSchema
+ @JsonSchema(requireNonNulls = false)
+ @Doc(title = "Authentication", description = "Authenticator settings")
+ data class AuthenticationSettings(
++    val basic: BasicSettings = BasicSettings(),
+     val ldap: LdapSettings = LdapSettings()
+ ) : SharedSettings
+ 
++@Doc(title = "Basic", description = "Basic Authenticator settings")
++data class BasicSettings(
++    @get:Doc(title = "Enabled", description = "Basic Authenticator is enabled")
++    val enabled: Boolean = true
++) : SharedSettings
++
+ @Doc(title = "LDAP", description = "LDAP Authenticator settings")
+ data class LdapSettings(
+     @get:Doc(title = "Enabled", description = "LDAP Authenticator is enabled")
+@@ -51,5 +58,21 @@ data class LdapSettings(
+     @get:Doc(title = "User Filter", description = "LDAP user filter")
+     val userFilter: String = "(&(objectClass=$typeAttribute)(ou=Maven Users))",
+     @get:Doc(title = "User Type", description = "Should the created through LDAP access token be TEMPORARY or PERSISTENT")
+-    val userType: AccessTokenType = PERSISTENT
++    val userType: AccessTokenType = PERSISTENT,
++    @get:Doc(title = "Member Attribute", description = "Attribute that determines group membership.")
++    val memberAttribute: String = "memberOf",
++    @get:Doc(title = "Manager Group", description = "LDAP group that grants manager permissions.")
++    val managerGroup: String = "",
++    @get:Doc(title = "Permission Sync", description = "LDAP permission synchronisation")
++    val permissions: List<LdapPermissionSettings> = listOf()
++) : SharedSettings
++
++@Doc(title = "LDAP permission", description = "Settings for an LDAP permission")
++data class LdapPermissionSettings(
++    @get:Doc(title = "LDAP Group", description = "LDAP group that grants this permission.")
++    val ldapGroup: String = "",
++    @get:Doc(title = "Read Routes", description = "Routes to grant read access.")
++    val read: List<String> = listOf(),
++    @get:Doc(title = "Write Routes", description = "Routes to grant write access.")
++    val write: List<String> = listOf()
+ ) : SharedSettings
+diff --git a/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt b/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
+index 22cb6d4aea6c933d9cd0587a37823ca572452e51..2d01231053832a81d4849e64bbe0c4fa3a581a69 100644
+--- a/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
++++ b/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
+@@ -19,6 +19,7 @@ package com.reposilite.auth.specification
+ import com.reposilite.auth.AuthenticationFacade
+ import com.reposilite.auth.BasicAuthenticator
+ import com.reposilite.auth.LdapAuthenticator
++import com.reposilite.auth.application.BasicSettings
+ import com.reposilite.auth.application.LdapSettings
+ import com.reposilite.status.FailureFacade
+ import com.reposilite.token.specification.AccessTokenSpecification
+@@ -28,6 +29,7 @@ import panda.std.reactive.toMutableReference
+ internal abstract class AuthenticationSpecification : AccessTokenSpecification() {
+ 
+     protected val failureFacade = FailureFacade(logger)
++    protected val basicConfiguration = BasicSettings().toMutableReference()
+     protected val ldapConfiguration = LdapSettings().toMutableReference()
+ 
+     protected lateinit var authenticationFacade: AuthenticationFacade
+@@ -37,7 +39,7 @@ internal abstract class AuthenticationSpecification : AccessTokenSpecification()
+         this.authenticationFacade = AuthenticationFacade(
+             journalist = logger,
+             authenticators = listOf(
+-                BasicAuthenticator(accessTokenFacade),
++                BasicAuthenticator(accessTokenFacade, basicConfiguration),
+                 LdapAuthenticator(
+                     journalist = logger,
+                     ldapSettings = ldapConfiguration,

@@ -1,0 +1,16 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: noeppi_noeppi <noeppinoeppi@gmail.com>
+Date: Sun, 5 May 2024 12:24:22 +0200
+Subject: [PATCH] Add log files to .gitignore
+
+
+diff --git a/.gitignore b/.gitignore
+index 66fc5919204d262f52631f6f1235dcfb1ca5b04f..e227e70f3bbbb0cae9470b297140c8c4ec00a536 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -132,3 +132,5 @@ log.txt
+ 
+ # Fleet
+ .fleet/
++
++log_*.txt.gz
