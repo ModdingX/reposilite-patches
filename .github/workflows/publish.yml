@@ -21,7 +21,7 @@ jobs:
         shell: bash
         working-directory: target
         run: |
-          docker build -t "ghcr.io/ModdingX/reposilite-patches:latest" -t "ghcr.io/ModdingX/reposilite-patches:${{ github.ref_name }}" .
+          docker build -t "ghcr.io/moddingx/reposilite-patches:latest" -t "ghcr.io/moddingx/reposilite-patches:${{ github.ref_name }}" .
 
       - name: 'Login to GitHub package registry'
         uses: docker/login-action@v3
@@ -33,5 +33,5 @@ jobs:
       - name: 'Publish container'
         shell: bash
         run: |
-          docker push "ghcr.io/ModdingX/reposilite-patches:${github.ref_name}"
-          docker push "ghcr.io/ModdingX/reposilite-patches:latest"
+          docker push "ghcr.io/moddingx/reposilite-patches:${github.ref_name}"
+          docker push "ghcr.io/moddingx/reposilite-patches:latest"
