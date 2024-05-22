@@ -21,7 +21,9 @@ jobs:
         shell: bash
         working-directory: target
         run: |
-          docker build -t "ghcr.io/moddingx/reposilite-patches:latest" -t "ghcr.io/moddingx/reposilite-patches:${{ github.ref_name }}" .
+          git tag -l | xargs git tag -d
+          git tag "${{ github.ref_name }}" HEAD
+          docker build -t "ghcr.io/moddingx/reposilite-patches:latest" -t "ghcr.io/moddingx/reposilite-patches:${{ github.ref_name }}" --build-arg "VERSION=${{ github.ref_name }}" .
 
       - name: 'Login to GitHub package registry'
         uses: docker/login-action@v3
