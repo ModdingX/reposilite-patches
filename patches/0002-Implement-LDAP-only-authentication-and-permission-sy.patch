@@ -5,7 +5,7 @@ Subject: [PATCH] Implement LDAP-only authentication and permission sync.
 
 
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
-index 36a8bc9eed5c33c0f4defca0aaf905387d056226..da5c53fa7af05cd522512958559f18f25d223a36 100644
+index a3fabdaaf38a69941c706bbec4d8c86368dc7900..fd1a9ccfb4af8415a6f84de501cc55448189fc95 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
 @@ -17,14 +17,19 @@
@@ -36,10 +36,10 @@ index 36a8bc9eed5c33c0f4defca0aaf905387d056226..da5c53fa7af05cd522512958559f18f2
 -        true
 +        basicSettings.map { it.enabled }
  
-     override fun realm(): String =
-         "Basic"
+     override fun priority(): Double =
+         0.0
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
-index c197f879b1e6191df6d8c9f80668393c9fc40177..7bcd376862f378853230f5f1fb98c898fe349324 100644
+index 758340bc2f1561f54a4a22892e1b7254fbc59d99..f3b4b2d8325dff76052abce096c2b878fe27fa23 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
 @@ -29,6 +29,9 @@ import com.reposilite.shared.notFoundError
@@ -134,10 +134,10 @@ index c197f879b1e6191df6d8c9f80668393c9fc40177..7bcd376862f378853230f5f1fb98c898
      private fun createDirContext(user: String, password: String): Result<out DirContext, ErrorResponse> =
          Hashtable<String, String>()
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
-index 5ece1c8db22bfb38150533a49e831a556fa99752..67d1261fc79966b45f5c3bdef67433324575a618 100644
+index 0084f19ec228fd504b9efaf9e69bc0985047e3fa..9b7950f649f5644ddd04aa3f6771ed393a4b01d3 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
-@@ -36,7 +36,8 @@ class AuthenticationComponents(
+@@ -37,7 +37,8 @@ class AuthenticationComponents(
  ) : PluginComponents {
  
      private fun basicAuthenticator(): BasicAuthenticator =
@@ -192,18 +192,18 @@ index 3df3f14168b2ba5e3f8b34394b6ff19afbbdf8b1..528c0f81362bb2a5401db30be92353be
 +    val write: List<String> = listOf()
  ) : SharedSettings
 diff --git a/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt b/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
-index 22cb6d4aea6c933d9cd0587a37823ca572452e51..2d01231053832a81d4849e64bbe0c4fa3a581a69 100644
+index 382c58add4855366edf1fabb683e84b8bfe01979..ddaaa513fd24787b3c7dac3b09b27c20ec1cfc47 100644
 --- a/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
 +++ b/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
-@@ -19,6 +19,7 @@ package com.reposilite.auth.specification
- import com.reposilite.auth.AuthenticationFacade
+@@ -20,6 +20,7 @@ import com.reposilite.auth.AuthenticationFacade
+ import com.reposilite.auth.Authenticator
  import com.reposilite.auth.BasicAuthenticator
  import com.reposilite.auth.LdapAuthenticator
 +import com.reposilite.auth.application.BasicSettings
  import com.reposilite.auth.application.LdapSettings
  import com.reposilite.status.FailureFacade
  import com.reposilite.token.specification.AccessTokenSpecification
-@@ -28,6 +29,7 @@ import panda.std.reactive.toMutableReference
+@@ -29,6 +30,7 @@ import panda.std.reactive.toMutableReference
  internal abstract class AuthenticationSpecification : AccessTokenSpecification() {
  
      protected val failureFacade = FailureFacade(logger)
@@ -211,10 +211,10 @@ index 22cb6d4aea6c933d9cd0587a37823ca572452e51..2d01231053832a81d4849e64bbe0c4fa
      protected val ldapConfiguration = LdapSettings().toMutableReference()
  
      protected lateinit var authenticationFacade: AuthenticationFacade
-@@ -37,7 +39,7 @@ internal abstract class AuthenticationSpecification : AccessTokenSpecification()
-         this.authenticationFacade = AuthenticationFacade(
+@@ -39,7 +41,7 @@ internal abstract class AuthenticationSpecification : AccessTokenSpecification()
              journalist = logger,
-             authenticators = listOf(
+             authenticators = sortedSetOf(
+                 Authenticator.priorityComparator,
 -                BasicAuthenticator(accessTokenFacade),
 +                BasicAuthenticator(accessTokenFacade, basicConfiguration),
                  LdapAuthenticator(
