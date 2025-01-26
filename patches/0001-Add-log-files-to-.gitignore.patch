@@ -5,10 +5,10 @@ Subject: [PATCH] Add log files to .gitignore
 
 
 diff --git a/.gitignore b/.gitignore
-index be2837373a96597826bd168509b8e47686130405..2daa044cb1509c22f45f2e6e824ea461a6b383a2 100644
+index 6856832a44711f7b00280e2fca000196681f6ede..45cb8b456ef1eb4d5d8dac5ed3f09e37da1a990b 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -136,3 +136,5 @@ log.txt
+@@ -137,3 +137,5 @@ log.txt
  
  # Fleet
  .fleet/
