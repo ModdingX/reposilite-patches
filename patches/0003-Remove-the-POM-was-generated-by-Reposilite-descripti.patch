@@ -18,10 +18,10 @@ index 9e9d40779e4a145433907da2a2eccefd53a816b1..c759a3f2290e733d3d219c75d1750503
                          """.trimIndent().trim().byteInputStream()
                      )
 diff --git a/reposilite-backend/src/test/kotlin/com/reposilite/maven/MavenFacadeTest.kt b/reposilite-backend/src/test/kotlin/com/reposilite/maven/MavenFacadeTest.kt
-index e4309ef08b249934e1c99ed6f7c98c47df7766c0..d3fe6f0f0dcb002938dd37028c0d599d56ba6b25 100644
+index 4e9eb994e18ef136cbd678b5c22da12d2fb85984..f2a636b3c8368aaf165042a1c94d4f0bddca9ca3 100644
 --- a/reposilite-backend/src/test/kotlin/com/reposilite/maven/MavenFacadeTest.kt
 +++ b/reposilite-backend/src/test/kotlin/com/reposilite/maven/MavenFacadeTest.kt
-@@ -346,7 +346,6 @@ internal class MavenFacadeTest : MavenSpecification() {
+@@ -419,7 +419,6 @@ internal class MavenFacadeTest : MavenSpecification() {
                    <groupId>com.dzikoysk</groupId>
                    <artifactId>reposilite</artifactId>
                    <version>3.0.1</version>
@@ -29,7 +29,7 @@ index e4309ef08b249934e1c99ed6f7c98c47df7766c0..d3fe6f0f0dcb002938dd37028c0d599d
                  </project>
                  """.trimIndent()
              )
-@@ -362,6 +361,7 @@ internal class MavenFacadeTest : MavenSpecification() {
+@@ -435,6 +434,7 @@ internal class MavenFacadeTest : MavenSpecification() {
              assertThat(metadataBody).contains("<version>3.0.0</version>")
              assertThat(metadataBody).contains("<version>3.0.1</version>")
              assertThat(metadataBody).contains("<lastUpdated>" + ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMM")))
