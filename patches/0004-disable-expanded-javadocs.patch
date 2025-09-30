@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: noeppi_noeppi <noeppinoeppi@gmail.com>
+Date: Tue, 30 Sep 2025 20:52:08 +0200
+Subject: [PATCH] disable expanded javadocs
+
+
+diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/javadocs/application/JavadocPlugin.kt b/reposilite-backend/src/main/kotlin/com/reposilite/javadocs/application/JavadocPlugin.kt
+index b913b8af92f0a57b539367d9ac2874c1e3abbd45..8d674c180eecd7a455af261f48d954f0ac5429c4 100644
+--- a/reposilite-backend/src/main/kotlin/com/reposilite/javadocs/application/JavadocPlugin.kt
++++ b/reposilite-backend/src/main/kotlin/com/reposilite/javadocs/application/JavadocPlugin.kt
+@@ -33,7 +33,7 @@ import com.reposilite.web.api.RoutingSetupEvent
+ @Plugin(name = "javadoc", dependencies = ["failure", "maven"])
+ internal class JavadocPlugin : ReposilitePlugin() {
+ 
+-    override fun initialize(): Facade {
++    override fun initialize(): Facade? = null /*{
+         val javadocFolder = parameters().workingDirectory.resolve("javadocs")
+         val failureFacade = facade<FailureFacade>()
+         val mavenFacade = facade<MavenFacade>()
+@@ -69,6 +69,6 @@ internal class JavadocPlugin : ReposilitePlugin() {
+         }
+ 
+         return javadocFacade
+-    }
++    }*/
+ 
+ }
+\ No newline at end of file
