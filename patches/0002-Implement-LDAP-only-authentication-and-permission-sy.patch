@@ -134,16 +134,15 @@ index 758340bc2f1561f54a4a22892e1b7254fbc59d99..f3b4b2d8325dff76052abce096c2b878
      private fun createDirContext(user: String, password: String): Result<out DirContext, ErrorResponse> =
          Hashtable<String, String>()
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
-index f4bbb089d5160dc16eaab98156e7d68bea0e1c29..2923d4598659cc3b41c1ac714859b9e172f2aabe 100644
+index f4bbb089d5160dc16eaab98156e7d68bea0e1c29..c8482026a5cce8114efc1ef20b152917fcea6d22 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
-@@ -36,7 +36,8 @@ class AuthenticationComponents(
+@@ -36,7 +36,7 @@ class AuthenticationComponents(
  ) : PluginComponents {
  
      private fun basicAuthenticator(): BasicAuthenticator =
 -        BasicAuthenticator(accessTokenFacade)
-+        BasicAuthenticator(accessTokenFacade,
-+            Reference.computed(Dependencies.dependencies(authenticationSettings)) { authenticationSettings.map { it.basic } })
++        BasicAuthenticator(accessTokenFacade, authenticationSettings.computed { it.basic })
  
      private fun ldapAuthenticator(): LdapAuthenticator =
          LdapAuthenticator(
