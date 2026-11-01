@@ -39,7 +39,7 @@ index e92c80e067c40f5f59a1458886eaa09e48fba419..c19c42d50d017c9e0279b513a9334f2a
      override fun priority(): Double =
          0.0
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
-index d29766cfa5b3b0f6983b539a2bb286f825858ad3..df649eeb4fdfd29a288dab7cc1f165508d4ab9e0 100644
+index d29766cfa5b3b0f6983b539a2bb286f825858ad3..ce44cd19d9ccf4db94811b84df74807b865f92b3 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
 @@ -29,6 +29,9 @@ import com.reposilite.shared.notFoundError
@@ -57,23 +57,27 @@ index d29766cfa5b3b0f6983b539a2bb286f825858ad3..df649eeb4fdfd29a288dab7cc1f16550
                          ldapFilterQuery = "(&(objectClass=$typeAttribute)($userAttribute={0})$userFilter)", // find user entry with search user,
                          ldapFilterQueryArguments = arrayOf(credentials.name),
 -                        requestedAttributes = arrayOf(userAttribute)
-+                        requestedAttributes = arrayOf(userAttribute, memberAttribute)
++                        requestedAttributes = listOf(userAttribute, memberAttribute, readRouteAttribute, writeRouteAttribute).filter(String::isNotEmpty).toTypedArray()
                      )
                  }
                  .filter { users ->
-@@ -88,31 +91,63 @@ internal class LdapAuthenticator(
+@@ -88,31 +91,69 @@ internal class LdapAuthenticator(
                  }
                  .map { users ->
                      users.first().let {
 -                        it.fullName to it.attributes[userAttribute]
-+                        Triple(it.fullName, it.attributes[userAttribute], it.attributes[memberAttribute])
++                        Triple(it.fullName, it.attributes[userAttribute], LdapExtraData(
++                            it.attributes[memberAttribute] ?: listOf(),
++                            if (readRouteAttribute.isNotEmpty()) it.attributes[readRouteAttribute] ?: listOf() else listOf(),
++                            if (writeRouteAttribute.isNotEmpty()) it.attributes[writeRouteAttribute] ?: listOf() else listOf()
++                        ))
                      }
                  }
 -                .filter({ (_, attributes) -> attributes != null }, { badRequest("User attribute not found") })
 -                .map { (userDomain, username) -> userDomain to username!! }
 -                .filter { (_, attributes) ->
 +                .filter({ (_, attributes, _) -> attributes != null }, { badRequest("User attribute not found") })
-+                .map { (userDomain, username, groups) -> Triple(userDomain, username!!, groups ?: listOf()) }
++                .map { (userDomain, username, extra) -> Triple(userDomain, username!!, extra) }
 +                .filter { (_, attributes, _) ->
                      when {
                          attributes.isEmpty() -> badRequest("Username attribute not found")
@@ -85,9 +89,9 @@ index d29766cfa5b3b0f6983b539a2bb286f825858ad3..df649eeb4fdfd29a288dab7cc1f16550
 -                .filter({ (userDomain, _) -> disableUserPasswordAuthentication || createDirContext(user = userDomain, password = credentials.secret).isOk }) { unauthorized("Unauthorized LDAP access") }
 -                .map { (_, username) ->
 -                    accessTokenFacade.getAccessToken(username)
-+                .map { (userDomain, username, groups) -> Triple(userDomain, username.first(), groups) }
++                .map { (userDomain, username, extra) -> Triple(userDomain, username.first(), extra) }
 +                .filter({ (userDomain, _, _) -> /*disableUserPasswordAuthentication ||*/ createDirContext(user = userDomain, password = credentials.secret).isOk }) { unauthorized("Unauthorized LDAP access") }
-+                .map { (_, username, groups) ->
++                .map { (_, username, extra) ->
 +                    val token = accessTokenFacade.getAccessToken(username)
                          ?: accessTokenFacade.createAccessToken(
                              CreateAccessTokenRequest(
@@ -97,24 +101,26 @@ index d29766cfa5b3b0f6983b539a2bb286f825858ad3..df649eeb4fdfd29a288dab7cc1f16550
 +                                secret = null // Generate a random token that can't be used because we disabled basic auth
                              )
                          ).accessToken
-+                    Pair(token, groups)
++                    Pair(token, extra)
                  }
 -                .filter({ !it.isExpired() }) { unauthorized("Invalid authorization credentials") }
 +                .filter({ !it.first.isExpired() }) { unauthorized("Invalid authorization credentials") }
-+                .flatMap { (token, groups) -> syncPermissions(token, groups).map { token } }
++                .flatMap { (token, extra) -> syncPermissions(token, extra).map { token } }
 +        }
-+    
-+    private fun syncPermissions(accessToken: AccessTokenDto, groups: List<String>): Result<Void, ErrorResponse> =
++
++    private fun syncPermissions(accessToken: AccessTokenDto, extra: LdapExtraData): Result<Void, ErrorResponse> =
 +        with(ldapSettings.get()) {
-+            if (managerGroup.isNotEmpty() && groups.contains(managerGroup)) {
++            if (managerGroup.isNotEmpty() && extra.groups.contains(managerGroup)) {
 +                accessTokenFacade.addPermission(accessToken.identifier, AccessTokenPermission.MANAGER)
 +            } else {
 +                accessTokenFacade.deletePermission(accessToken.identifier, AccessTokenPermission.MANAGER)
 +            }
 +            val readRoutes = HashSet<String>()
 +            val writeRoutes = HashSet<String>()
++            readRoutes.addAll(extra.readRoutes)
++            writeRoutes.addAll(extra.writeRoutes)
 +            for (permission in permissions) {
-+                if (groups.contains(permission.ldapGroup)) {
++                if (extra.groups.contains(permission.ldapGroup)) {
 +                    readRoutes.addAll(permission.read)
 +                    writeRoutes.addAll(permission.write)
 +                }
@@ -135,6 +141,12 @@ index d29766cfa5b3b0f6983b539a2bb286f825858ad3..df649eeb4fdfd29a288dab7cc1f16550
          }
  
      private fun createDirContext(user: String, password: String): Result<out DirContext, ErrorResponse> =
+@@ -226,4 +267,5 @@ internal class LdapAuthenticator(
+     override fun realm(): String =
+         "LDAP"
+ 
++    internal data class LdapExtraData(val groups: List<String>, val readRoutes: List<String>, val writeRoutes: List<String>)
+ }
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
 index f4bbb089d5160dc16eaab98156e7d68bea0e1c29..c8482026a5cce8114efc1ef20b152917fcea6d22 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
@@ -149,7 +161,7 @@ index f4bbb089d5160dc16eaab98156e7d68bea0e1c29..c8482026a5cce8114efc1ef20b152917
      private fun ldapAuthenticator(): LdapAuthenticator =
          LdapAuthenticator(
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
-index e5a5acccedf437a9741f53d4681fd8c965dc53cb..02de3b7d756ae954d03f4f87bf61ae0f610b2169 100644
+index e5a5acccedf437a9741f53d4681fd8c965dc53cb..72c7e9e2b200fc5099e717085e464fad25b0d267 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
 @@ -27,6 +27,7 @@ import io.javalin.openapi.JsonSchema
@@ -173,7 +185,7 @@ index e5a5acccedf437a9741f53d4681fd8c965dc53cb..02de3b7d756ae954d03f4f87bf61ae0f
  @Doc(title = "LDAP", description = "LDAP Authenticator settings")
  data class LdapSettings(
      @get:Doc(title = "Enabled", description = "LDAP Authenticator is enabled")
-@@ -63,5 +70,21 @@ data class LdapSettings(
+@@ -63,5 +70,25 @@ data class LdapSettings(
      @get:Doc(title = "User Filter", description = "LDAP user filter")
      val userFilter: String = "(&(objectClass=$typeAttribute)(ou=Maven Users))",
      @get:Doc(title = "User Type", description = "Should the created through LDAP access token be TEMPORARY or PERSISTENT")
@@ -184,7 +196,11 @@ index e5a5acccedf437a9741f53d4681fd8c965dc53cb..02de3b7d756ae954d03f4f87bf61ae0f
 +    @get:Doc(title = "Manager Group", description = "LDAP group that grants manager permissions.")
 +    val managerGroup: String = "",
 +    @get:Doc(title = "Permission Sync", description = "LDAP permission synchronisation")
-+    val permissions: List<LdapPermissionSettings> = listOf()
++    val permissions: List<LdapPermissionSettings> = listOf(),
++    @get:Doc(title = "Read Route Attribute", description = "LDAP attribute that contains read routes for a user.")
++    val readRouteAttribute: String = "",
++    @get:Doc(title = "Write Route Attribute", description = "LDAP attribute that contains write routes for a user.")
++    val writeRouteAttribute: String = "",
 +) : SharedSettings
 +
 +@Doc(title = "LDAP permission", description = "Settings for an LDAP permission")
