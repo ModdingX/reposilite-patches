@@ -33,10 +33,14 @@ elif [[ "$#" -eq 1 && "${1}" == 'apply' ]]; then
   cd 'target' || die 'Failed to cd into target directory.'
   git config --local 'core.whitespace' ''
   git config --local 'commit.gpgsign' 'false'
+  git config --local 'advice.detachedHead' 'false'
   if ! git diff-index --quiet HEAD; then
     die "Target repository has changed. Commit or revert them first."
   fi
-  git fetch origin && git reset --hard 'origin/HEAD'
+  if ! UPSTREAM_HEAD="$(git -C '../upstream/' rev-parse HEAD)"; then
+    die 'Could not detect upstream HEAD.'
+  fi
+  git fetch origin && git reset --hard "${UPSTREAM_HEAD}"
   IFS=$'\n' read -rd "" -a PATCHES <<< "$(find '../patches/' -type 'f' -name '*.patch' | sort)" || [[ "$?" -le 128 ]]
   echo "Applying ${#PATCHES[@]} patches on top of $(git rev-parse --short HEAD) ($(git log -1 --format=%s))..."
   if git am --3way --whitespace=fix -- "${PATCHES[@]}"; then
