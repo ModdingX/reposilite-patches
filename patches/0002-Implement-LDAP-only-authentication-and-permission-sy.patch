@@ -39,7 +39,7 @@ index 0bbd1ce72e474368c77a3398f5e98964aeaf3686..9b2d6d5e77e7d82b0312ab4b1bb3bebf
      override fun priority(): Double =
          0.0
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
-index 13340c0a355e12d8c7ead2885b6978aaf52c2970..89c14c7929aa3042e0e402a12c5efcdd4e13fa2b 100644
+index 13340c0a355e12d8c7ead2885b6978aaf52c2970..62fede005e436e14b8e1f84eacbf871ec49723c9 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
 @@ -29,6 +29,9 @@ import com.reposilite.shared.notFoundError
@@ -141,7 +141,17 @@ index 13340c0a355e12d8c7ead2885b6978aaf52c2970..89c14c7929aa3042e0e402a12c5efcdd
          }
  
      private fun createDirContext(user: String, password: String): Result<out DirContext, ErrorResponse> =
-@@ -226,4 +267,5 @@ internal class LdapAuthenticator(
+@@ -209,8 +250,7 @@ internal class LdapAuthenticator(
+ 
+     private fun SearchResult.attributesMap(requestedAttributes: Array<out String>): AttributesMap =
+         requestedAttributes.associate { attribute ->
+-            attributes.get(attribute)
+-                .all
++            (attributes.get(attribute)?.all ?: java.util.Collections.emptyEnumeration())
+                 .asSequence()
+                 .map { it.toString() }
+                 .toList()
+@@ -226,4 +266,5 @@ internal class LdapAuthenticator(
      override fun realm(): String =
          "LDAP"
  
