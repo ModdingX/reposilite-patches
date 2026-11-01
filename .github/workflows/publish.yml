@@ -15,7 +15,11 @@ jobs:
           submodules: true
 
       - name: 'Apply patches'
-        run: ./manage.sh apply
+        shell: bash
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          ./manage.sh apply
 
       - name: 'Build container'
         shell: bash
