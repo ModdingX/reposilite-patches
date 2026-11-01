@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: noeppi_noeppi <noeppinoeppi@gmail.com>
+Date: Sun, 1 Nov 2026 21:25:18 +0100
+Subject: [PATCH] Include junixsocket to allow postgres connection to a unix
+ socket.
+
+
+diff --git a/reposilite-backend/build.gradle.kts b/reposilite-backend/build.gradle.kts
+index 0bf5d9fe3ceebe0a9801b5b8ac00aa1ebbe2d07a..ef1448d2d18ea63bf6f00f3e1e09ee9ab2446a58 100644
+--- a/reposilite-backend/build.gradle.kts
++++ b/reposilite-backend/build.gradle.kts
+@@ -115,6 +115,7 @@ dependencies {
+     implementation("org.xerial:sqlite-jdbc:3.53.4.0")
+     implementation("org.mariadb.jdbc:mariadb-java-client:3.5.11")
+     implementation("org.postgresql:postgresql:42.7.14")
++    implementation("com.kohlschutter.junixsocket:junixsocket-core:2.11.1")
+     implementation("com.h2database:h2:2.5.252")
+     implementation("com.mysql:mysql-connector-j:26.10.0") {
+         exclude(group = "com.google.protobuf", module = "protobuf-java")
+@@ -175,6 +176,7 @@ tasks.withType<ShadowJar> {
+         exclude(dependency("com.mysql:.*"))
+         exclude(dependency("org.mariadb.jdbc:.*"))
+         exclude(dependency("org.postgresql:.*"))
++        exclude(dependency("com.kohlschutter.junixsocket:.*"))
+         exclude(dependency("org.h2:.*"))
+         exclude(dependency("com.h2database:.*"))
+         exclude(dependency("org.tinylog:.*"))
