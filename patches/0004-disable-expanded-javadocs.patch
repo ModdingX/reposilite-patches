@@ -5,7 +5,7 @@ Subject: [PATCH] disable expanded javadocs
 
 
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/javadocs/application/JavadocPlugin.kt b/reposilite-backend/src/main/kotlin/com/reposilite/javadocs/application/JavadocPlugin.kt
-index d8ce2d705c66b51e52c64137a896b63d4ec1104e..103878d28614ee1175bccfe69158b701311c3ccd 100644
+index b31eb9d4061c826a7d68a1a21931cb3f8b282bb5..d9dae095720e0ac92d25450d2b82c0388bf98571 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/javadocs/application/JavadocPlugin.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/javadocs/application/JavadocPlugin.kt
 @@ -37,7 +37,7 @@ import kotlin.io.path.exists

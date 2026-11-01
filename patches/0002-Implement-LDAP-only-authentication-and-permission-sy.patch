@@ -5,7 +5,7 @@ Subject: [PATCH] Implement LDAP-only authentication and permission sync.
 
 
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
-index e92c80e067c40f5f59a1458886eaa09e48fba419..c19c42d50d017c9e0279b513a9334f2ac54850ed 100644
+index 0bbd1ce72e474368c77a3398f5e98964aeaf3686..9b2d6d5e77e7d82b0312ab4b1bb3bebf3a133819 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/BasicAuthenticator.kt
 @@ -17,14 +17,19 @@
@@ -39,7 +39,7 @@ index e92c80e067c40f5f59a1458886eaa09e48fba419..c19c42d50d017c9e0279b513a9334f2a
      override fun priority(): Double =
          0.0
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
-index d29766cfa5b3b0f6983b539a2bb286f825858ad3..ce44cd19d9ccf4db94811b84df74807b865f92b3 100644
+index 13340c0a355e12d8c7ead2885b6978aaf52c2970..89c14c7929aa3042e0e402a12c5efcdd4e13fa2b 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/LdapAuthenticator.kt
 @@ -29,6 +29,9 @@ import com.reposilite.shared.notFoundError
@@ -148,7 +148,7 @@ index d29766cfa5b3b0f6983b539a2bb286f825858ad3..ce44cd19d9ccf4db94811b84df74807b
 +    internal data class LdapExtraData(val groups: List<String>, val readRoutes: List<String>, val writeRoutes: List<String>)
  }
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
-index f4bbb089d5160dc16eaab98156e7d68bea0e1c29..c8482026a5cce8114efc1ef20b152917fcea6d22 100644
+index 69d423a1d112cbf221ecde63a55bed10fc812c20..7a3bfdd30385cc8763c7d20ec58ca71d0504e90a 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationComponents.kt
 @@ -36,7 +36,7 @@ class AuthenticationComponents(
@@ -161,7 +161,7 @@ index f4bbb089d5160dc16eaab98156e7d68bea0e1c29..c8482026a5cce8114efc1ef20b152917
      private fun ldapAuthenticator(): LdapAuthenticator =
          LdapAuthenticator(
 diff --git a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
-index e5a5acccedf437a9741f53d4681fd8c965dc53cb..72c7e9e2b200fc5099e717085e464fad25b0d267 100644
+index e67aa52b2622afe3afb4e72c76aab5a51fdeef6b..ff6e724c57275eb29d1b4f91a039d642648c2d36 100644
 --- a/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
 +++ b/reposilite-backend/src/main/kotlin/com/reposilite/auth/application/AuthenticationSettings.kt
 @@ -27,6 +27,7 @@ import io.javalin.openapi.JsonSchema
@@ -213,7 +213,7 @@ index e5a5acccedf437a9741f53d4681fd8c965dc53cb..72c7e9e2b200fc5099e717085e464fad
 +    val write: List<String> = listOf()
  ) : SharedSettings
 diff --git a/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt b/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
-index b5ce760c23a1b95409d31e7b1d7455a4f32099ce..a4767bdf424815b817f302b6bb40bada634fd2dd 100644
+index 76c600a12fef10918a0cf8c4e6ff854ff5d7656b..2085e107ebd37f4027e2959fe0aa30064a9459fe 100644
 --- a/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
 +++ b/reposilite-backend/src/test/kotlin/com/reposilite/auth/specification/AuthenticationSpecification.kt
 @@ -20,6 +20,7 @@ import com.reposilite.auth.AuthenticationFacade
